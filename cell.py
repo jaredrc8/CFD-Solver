@@ -8,6 +8,7 @@ class cell:
         self.volume = self.length_x * self.length_y # Volume of cell
 
         # Flow variables
+        self.rho = 0.0 # Density
         self.u = 0.0  # Velocity in x-direction
         self.v = 0.0  # Velocity in y-direction
         self.p = 0.0  # Pressure
