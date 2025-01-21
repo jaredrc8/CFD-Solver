@@ -29,6 +29,7 @@ cx = nx - 1 # Number of Cells in x-direction
 cy = ny - 1 # Number of Cells in y-direction
 cell_length_x = domain_x / nx # Length of Cell in x-direction
 cell_length_y = domain_y / ny # Length of Cell in y-direction
+timestep = 0.01 # seconds
 
 # Generate Structured Mesh with nx x ny Cells
 def mesh_generation():
@@ -72,7 +73,15 @@ def mesh_generation():
             except IndexError:
                 print("IndexError at [" + str(i) + "," + str(j) + "]")
             cell.set_neighbours(Cell, north, south, east, west)
-
+    fig, ax = plt.subplots(figsize=(30, 12))
+    ax.set_xlim(-domain_x / 2, domain_x / 2)
+    ax.set_ylim(-domain_y / 2, domain_y / 2)
+    for i in range(cx):
+        for j in range(cy):
+            '''rect = patches.Rectangle(xy=(nodes_x[j,i], nodes_y[j,i]), width=mesh[i,j].length_x, height=mesh[i,j].length_y, 
+                    linewidth=1, edgecolor='darkgrey', facecolor='white')
+            ax.add_patch(rect)'''
+            plt.scatter(mesh[i,j].Xc, mesh[i,j].Yc, color='blue', s=10, zorder=5, label="Cell centers") 
     return nodes_x, nodes_y, centers_x, centers_y, mesh
 
 # Set Boundary Conditions on Outer Bounds of Domain
@@ -156,8 +165,103 @@ def set_initial_conditions():
                 else:
                     print("Boundary Condition Error at [" + str(mesh[i,j].Xc) + "," + str(mesh[i,j].Yc) + "]")
 
+def get_face_velocity(cell, neighbour, direction):
+    """
+    Compute velocity at cell face (first order upwind scheme)
+    """
+    try:
+        if direction == "N":
+            if cell.v >= 0: # Flow from current cell to neighbour
+                face_velocity = cell.v
+            else:
+                face_velocity = neighbour.v
+        elif direction == "S":
+            if cell.v <= 0: # Flow from current cell to neighbour
+                face_velocity = cell.v
+            else:
+                face_velocity = neighbour.v
+        elif direction == "E":
+            if cell.u >= 0: # Flow from current cell to neighbour
+                face_velocity = cell.u
+            else:
+                face_velocity = neighbour.u
+        elif direction == "W":
+            if cell.u <= 0: # Flow from current cell to neighbour
+                face_velocity = cell.u
+            else:
+                face_velocity = neighbour.u
+        else:
+            print("Direction Error in get_face_velocity()")
+    except Exception as e:
+        None
+        face_velocity = 0.0
+    return face_velocity
+
+def compute_flux(cell, neighbour, direction, variable):
+    """
+    cell - current cell object
+    neighbour - neighbouring cell object
+    direction - direction of the face
+    variable - flow variable
+    """
+    face_velocity = get_face_velocity(cell, neighbour, direction)
+    area = cell.length_x * cell.length_y
+    try:
+        if variable == "momentum":
+            if direction == "N":
+                if cell.v >= 0: # Flow from current cell to neighbour
+                    phi = cell.v * cell.rho
+                else:
+                    phi = neighbour.v * neighbour.rho
+            elif direction == "S":
+                if cell.v <= 0: # Flow from current cell to neighbour
+                    phi = cell.v * cell.rho
+                else:
+                    phi = neighbour.v * neighbour.rho
+            elif direction == "E":
+                if cell.u >= 0: # Flow from current cell to neighbour
+                    phi = cell.u * cell.rho
+                else:
+                    phi = neighbour.u * neighbour.rho
+            elif direction == "W":
+                if cell.u <= 0: # Flow from current cell to neighbour
+                    phi = cell.u * cell.rho
+                else:
+                    phi = neighbour.u * neighbour.rho
+            else:
+                print("Direction Error in compute_flux()")
+        elif variable == "mass":
+            if direction == "N":
+                if cell.v >= 0: # Flow from current cell to neighbour
+                    phi = cell.rho
+                else:
+                    phi = neighbour.rho
+            elif direction == "S":
+                if cell.v <= 0: # Flow from current cell to neighbour
+                    phi = cell.rho
+                else:
+                    phi = neighbour.rho
+            elif direction == "E":
+                if cell.u >= 0: # Flow from current cell to neighbour
+                    phi = cell.rho
+                else:
+                    phi = neighbour.rho
+            elif direction == "W":
+                if cell.u <= 0: # Flow from current cell to neighbour
+                    phi = cell.u * cell.rho
+                else:
+                    phi = neighbour.rho
+            else:
+                print("Variable Error in compute_flux()")
+    except Exception as e:
+        None
+        phi = 0.0
+
+    flux = phi * face_velocity * area
+
+
 def compute_fluxes(cell):
-    # Compute Convective and Pressure Fluxes Across a Face
+    # Compute Mass and Momentum Fluxes Across a Face
     # First-Order Upwind Scheme
 
     # Flow Variables of Current Cell
@@ -170,13 +274,25 @@ def compute_fluxes(cell):
         # Cell Neighbour in Direction
         neighbour = mesh[cell.neighbours[direction]]
         if neighbour is not None:
-            if direction == "N":
-                if v > 0: # Flow from current cell to neighbour
-                    phi_upwind = v
-                else: # Flow from neighbour to current cell
-                    phi_upwind = neighbour.v
-                cell.flux_v["N"] = v * phi_upwind * cell.volume
+            cell.momentum_flux[direction] = compute_flux(cell, neighbour, direction, "momentum")
+            cell.mass_flux[direction] = compute_flux(cell, neighbour, direction, "mass")
+                
+def update_cell_variables(cell):
+    """
+    Update flow variables in cell
+    """
+    # Compute Mass and Momentum Fluxes Across a Face
+    # First-Order Upwind Scheme
+    compute_fluxes(cell)
 
+    # Update Flow Variables
+    # Forward Euler Scheme
+    try:
+        cell.rho += timestep * (cell.mass_flux["N"] - cell.mass_flux["S"] + cell.mass_flux["E"] - cell.mass_flux["W"]) / cell.volume
+        cell.u += timestep * (cell.momentum_flux["E"] - cell.momentum_flux["W"]) / cell.volume
+        cell.v += timestep * (cell.momentum_flux["N"] - cell.momentum_flux["S"]) / cell.volume
+    except Exception as e:
+        None
 
 def assemble_matrix():
     A = np.zeros(cx*cy, cx*cy)
@@ -194,6 +310,9 @@ nodes_x, nodes_y, centers_x, centers_y, mesh = mesh_generation()
 set_boundary_conditions()
 set_object()
 set_initial_conditions()
+for i in range(cx):
+    for j in range(cy):
+        update_cell_variables(mesh[i,j])
 
 # Plot Mesh
 fig, ax = plt.subplots(figsize=(10, 4))

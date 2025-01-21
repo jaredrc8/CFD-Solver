@@ -17,9 +17,8 @@ class cell:
         self.neighbours = {"N": None, "S": None, "E": None, "W": None}
 
         # Fluxes (per face)
-        self.flux_u = {"N": 0.0, "S": 0.0, "E": 0.0, "W": 0.0}
-        self.flux_v = {"N": 0.0, "S": 0.0, "E": 0.0, "W": 0.0}
-        self.flux_p = {"N": 0.0, "S": 0.0, "E": 0.0, "W": 0.0}
+        self.momentum_flux = {"N": 0.0, "S": 0.0, "E": 0.0, "W": 0.0}
+        self.mass_flux = {"N": 0.0, "S": 0.0, "E": 0.0, "W": 0.0}
 
         # Boundary flag
         self.is_boundary = False
