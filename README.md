@@ -8,4 +8,4 @@ Method: Finite Volume Method
 
 Time Schemes: Forward Euler
 
-Solution Schemes: Central Difference (convection), First Order Upwind (diffusion)
+Solution Schemes: Central Difference (convection)
